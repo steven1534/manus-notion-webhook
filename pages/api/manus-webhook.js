@@ -3,7 +3,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, message: 'Webhook endpoint ready' });
   }
 
-  const { event_type, task_detail } = req.body;
+  const body = req.body || {};
+  const { event_type, task_detail } = body;
 
   if (event_type !== 'task_stopped' || task_detail?.stop_reason !== 'finish') {
     return res.status(200).json({ skipped: true });
@@ -18,6 +19,8 @@ export default async function handler(req, res) {
 
   try {
     const today = new Date().toISOString().split('T')[0];
+    const taskTitle = (task_detail?.task_title || 'Manus Session').slice(0, 100);
+
     const notionRes = await fetch('https://api.notion.com/v1/pages', {
       method: 'POST',
       headers: {
@@ -29,19 +32,15 @@ export default async function handler(req, res) {
         parent: { database_id: NOTION_DB_ID },
         properties: {
           'Player Name': {
-            title: [{ text: { content: task_detail.task_title || 'Manus Task' } }]
+            title: [{ text: { content: taskTitle } }]
           },
-          'Session Notes': {
-            rich_text: [{ text: { content: (task_detail.message || '').slice(0, 2000) } }]
-          },
-          'Date': { date: { start: today } },
-          'Manus Link': { url: task_detail.task_url || null },
-          'Status': {
-            rich_text: [{ text: { content: 'finish' } }]
+          'Last Session Date': {
+            date: { start: today }
           }
         }
       })
     });
+
     const data = await notionRes.json();
     if (!notionRes.ok) return res.status(500).json({ error: data });
     return res.status(200).json({ success: true, id: data.id });
